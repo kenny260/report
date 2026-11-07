@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// Campus Incident Reporter - Storage security rules
+// Photos live at incidents/{incidentId}/{fileName}.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function verifiedAlu() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email.matches('.*@alustudent[.]com')
+            || request.auth.token.email.matches('.*@alueducation[.]com'));
+    }
+
+    function staffDomain() {
+      return request.auth.token.email.matches('.*@alueducation[.]com');
+    }
+
+    // The report document this photo belongs to (cross-service lookup).
+    function incident(incidentId) {
+      return firestore.get(/databases/(default)/documents/incidents/$(incidentId));
+    }
+
+    function isReporter(incidentId) {
+      return incident(incidentId).data.reportedBy == request.auth.uid;
+    }
+
+    match /incidents/{incidentId}/{fileName} {
+      // Any verified ALU user can view photos in the feed.
+      allow read: if verifiedAlu();
+
+      // Only the reporter uploads, only JPEG/PNG, and under 5 MB.
+      allow create: if verifiedAlu()
+        && isReporter(incidentId)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png'];
+
+      // Photos are never edited in place.
+      allow update: if false;
+
+      // The reporter, or staff, can remove photos (e.g. when deleting a report).
+      allow delete: if verifiedAlu()
+        && (staffDomain() || isReporter(incidentId));
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

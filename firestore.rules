@@ -1,0 +1,137 @@
+rules_version = '2';
+
+// Campus Incident Reporter - Firestore security rules
+//
+// Roles
+//   student: @alustudent.com   -> can create reports and upvote
+//   staff:   @alueducation.com -> can additionally change status/priority
+//
+// Rules never trust a client-supplied role on its own: a profile may only be
+// created with the role that matches its verified email domain, and the role
+// can never be changed from the client.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Email belongs to the signed-in user, ends with an ALU domain and has
+    // been verified (the token claim is refreshed by the app after verifying).
+    function verifiedAlu() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && (request.auth.token.email.matches('.*@alustudent[.]com')
+            || request.auth.token.email.matches('.*@alueducation[.]com'));
+    }
+
+    function hasAluEmail() {
+      return signedIn()
+        && (request.auth.token.email.matches('.*@alustudent[.]com')
+            || request.auth.token.email.matches('.*@alueducation[.]com'));
+    }
+
+    function staffDomain() {
+      return request.auth.token.email.matches('.*@alueducation[.]com');
+    }
+
+    // Staff = verified staff-domain email, or a profile the project owner
+    // promoted to role 'staff' from the Firebase Console.
+    function isStaff() {
+      return verifiedAlu()
+        && (staffDomain()
+            || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff');
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // ---------- users ----------
+    match /users/{userId} {
+      // Profiles contain email addresses, so students cannot read each
+      // other's. A user can always read their own profile (even before
+      // verifying, so the app can route them to the verification screen);
+      // staff can read any profile to follow up on a report.
+      allow read: if (isOwner(userId) && hasAluEmail()) || isStaff();
+
+      // The account owner creates their own profile at registration (the
+      // email is not verified yet at that moment). The role must match the
+      // email domain, so nobody can self-assign 'staff'.
+      allow create: if isOwner(userId)
+        && hasAluEmail()
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == (staffDomain() ? 'staff' : 'student');
+
+      // Profile edits may not touch identity or role fields.
+      allow update: if isOwner(userId)
+        && verifiedAlu()
+        && !changedKeys().hasAny(['role', 'email', 'createdAt']);
+
+      allow delete: if false;
+    }
+
+    // ---------- incidents ----------
+    match /incidents/{incidentId} {
+      allow read: if verifiedAlu();
+
+      // A student creates a report as themselves, starting as 'pending'
+      // with no votes, and with sane field sizes.
+      allow create: if verifiedAlu()
+        && request.resource.data.reportedBy == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.upvoteCount == 0
+        // Privacy: no email is stored on a report, and anonymous reports
+        // carry no name.
+        && !('reporterEmail' in request.resource.data)
+        && request.resource.data.isAnonymous is bool
+        && (request.resource.data.isAnonymous == false
+            || request.resource.data.reporterName == 'Anonymous')
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 5
+        && request.resource.data.title.size() <= 100
+        && request.resource.data.description is string
+        && request.resource.data.description.size() >= 15
+        && request.resource.data.description.size() <= 1000
+        && request.resource.data.imageUrls.size() <= 5;
+
+      allow update: if verifiedAlu() && (
+        // Staff: status workflow fields only.
+        (isStaff()
+          && changedKeys().hasOnly([
+               'status', 'priority', 'assignedTo', 'assignedToName',
+               'updatedAt', 'statusHistory'
+             ]))
+        // Owner: attach the uploaded photo URLs to their own report.
+        || (resource.data.reportedBy == request.auth.uid
+            && changedKeys().hasOnly(['imageUrls', 'updatedAt'])
+            && request.resource.data.imageUrls.size() <= 5)
+        // Any verified user: add or remove only their own upvote.
+        || (changedKeys().hasOnly(['upvoteCount', 'upvotedBy'])
+            && request.resource.data.upvotedBy.toSet()
+                 .difference(resource.data.upvotedBy.toSet())
+                 .hasOnly([request.auth.uid])
+            && resource.data.upvotedBy.toSet()
+                 .difference(request.resource.data.upvotedBy.toSet())
+                 .hasOnly([request.auth.uid])
+            && request.resource.data.upvoteCount == request.resource.data.upvotedBy.size())
+      );
+
+      // Staff can delete any report; the owner only while it is still pending.
+      allow delete: if verifiedAlu()
+        && (isStaff()
+            || (resource.data.reportedBy == request.auth.uid
+                && resource.data.status == 'pending'));
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
