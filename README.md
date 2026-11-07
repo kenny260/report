@@ -1,40 +1,37 @@
-# ALU Campus Incident Reporter (Mobile Application)
+# ALU Campus Incident Reporter (Mobile App)
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart)](https://dart.dev)
-[![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Storage-FFCA28?logo=firebase)](https://firebase.google.com)
-[![License](https://img.shields.io/badge/License-Academic%20Use-blue)](#)
+Ever noticed a broken tap, a dead socket, or a water outage on campus and had no idea who to tell? This Flutter app fixes that. It's a role-based mobile app that connects students at African Leadership University (ALU) with campus operations. Students can report an issue, snap a photo, and follow it until it's sorted. Authorized staff can review, prioritize, assign, and resolve incidents in real time.
 
-A modern, role-based Flutter mobile application designed to bridge the communication gap between students and campus operations at the African Leadership University (ALU). The application enables students to report, photograph, and track campus issues—ranging from broken facilities, water outages, and electrical hazards to sanitation and safety concerns—while empowering authorized campus staff to review, prioritize, assign, and resolve incidents in real time.
+It covers the everyday stuff: broken facilities, water outages, electrical hazards, sanitation and safety concerns.
 
 ---
 
-## Key Features
+## What it does
 
-### 1. Student Experience
-- **ALU Institutional Authentication**: Restricted registration and login using verified `@alustudent.com` credentials with email verification flow.
-- **Incident Reporting Workflow**:
-  - Title, description, and incident category selection (Broken Facilities, Water Shortages, Electricity Outages, Damaged Furniture, Sanitation, Safety Concerns, Network/Internet, Other).
-  - Campus Location selector (Main Building, Library, Cafeteria, Computer Labs, Dormitories, Sports Complex, etc.).
-  - Severity / Priority tagging (Low, Medium, High, Critical).
-  - Optional multi-photo attachment via Camera or Gallery uploaded to Firebase Storage.
-- **Feed & Exploration**: Real-time incident feed with dynamic keyword search, category chip filters, status filters, and priority filtering.
-- **Personal Submissions ("My Reports")**: Dedicated tracking tab to observe status progression on personal reports.
-- **Privacy**: Students can report anonymously; their name is hidden from other students, and emails are never stored on reports. Staff can still look up the reporter to follow up and prevent misuse.
-- **Upvote / "Me Too" Counter**: Allows students to flag incidents affecting multiple people to boost triage priority.
+### For students
+- **ALU-only sign-in**: You can only register and log in with a verified `@alustudent.com` email, and you'll need to confirm it through the verification email.
+- **Reporting an incident**:
+  - Add a title and description, then pick a category (Broken Facilities, Water Shortages, Electricity Outages, Damaged Furniture, Sanitation, Safety Concerns, Network/Internet, or Other).
+  - Choose where it happened (Main Building, Library, Cafeteria, Computer Labs, Dormitories, Sports Complex, and more).
+  - Set a severity: Low, Medium, High or Critical.
+  - Optionally attach several photos from the camera or gallery. They're uploaded to Firebase Storage.
+- **Feed and search**: A live feed of incidents you can search by keyword and filter by category, status or priority.
+- **My Reports**: A tab just for your own submissions, so you can watch their status change over time.
+- **Privacy**: You can report anonymously. Other students won't see your name, and emails are never stored on reports. Staff can still look up who reported something so they can follow up and stop misuse.
+- **"Me Too" upvotes**: If an issue affects a lot of people, hit the upvote. It helps staff see what needs attention first.
 
-### 2. Authorized Staff Experience
-- **Role-Based Access Control (RBAC)**: Automatically recognizes `@alueducation.com` email addresses or accounts with staff authorization.
-- **Staff Command Center**: Real-time resolution metrics (Pending Triage, Under Review, In Progress, Resolved), incident volume distribution by category, and an urgent High/Critical queue.
-- **Ticket Triage & Status Updates**: Staff can transition incidents across the lifecycle:
+### For authorized staff
+- **Role-based access (RBAC)**: The app recognizes `@alueducation.com` emails, or accounts with staff authorization, and gives them the staff view automatically.
+- **Staff Command Center**: Live numbers for Pending Triage, Under Review, In Progress and Resolved, plus incident volume by category and a queue of urgent High/Critical reports.
+- **Triage and status updates**: Staff move incidents through the full lifecycle:
   `Pending` -> `Under Review` -> `In Progress` -> `Resolved` / `Dismissed`
-- **Resolution Audit Trail**: Attach staff resolution notes and timestamps (e.g., "Plumbing contractor dispatched; new valve fitted").
+- **Resolution audit trail**: Staff can add resolution notes with timestamps, like "Plumbing contractor dispatched; new valve fitted."
 
 ---
 
-## Architecture & State Management
+## How it's built
 
-The application is structured following clean architectural layers and the **MVVM (Model-View-ViewModel / Provider)** pattern:
+The app uses clean architectural layers and the **MVVM (Model-View-ViewModel / Provider)** pattern. Here's the layout:
 
 ```
 lib/
@@ -72,32 +69,32 @@ lib/
 └── firebase_options.dart # Platform configuration options
 ```
 
-### State Management Strategy
-- **`AuthProvider`**: Manages current authentication lifecycle, session persistence, role evaluation (`isStudent` vs `isStaff`), ALU domain validation, and email verification states.
-- **`IncidentProvider`**: Subscribes to the live Firestore stream, applies category/status/priority/keyword filters, and runs report creation, status updates, upvotes and deletion. Every change is confirmed by Firestore and flows back through the stream, so all screens stay in sync. A `ChangeNotifierProxyProvider` starts the subscription after login and clears all data on logout. Failed writes return `false` and expose an error message; nothing is faked locally.
+### State management
+- **`AuthProvider`** handles the login lifecycle and session persistence. It also determines the user's role (`isStudent` vs `isStaff`), checks the ALU email domain, and tracks email verification.
+- **`IncidentProvider`** listens to the live Firestore stream and applies the category, status, priority, and keyword filters. It also handles creating reports, updating statuses, upvoting, and deleting. Every change is confirmed by Firestore and flows back through the stream, so all screens stay in sync. A `ChangeNotifierProxyProvider` starts the subscription after login and clears everything on logout. If a write fails, it returns `false` and exposes an error message. Nothing is faked locally.
 
 ---
 
-## Security & Access Control
+## Security and access control
 
-- **Domain restriction + verification**: Only `@alustudent.com` (student) and `@alueducation.com` (staff) addresses can register or sign in, and the app stays on the verification screen until the email is verified. The rules repeat this check using the token's `email_verified` claim, so it cannot be bypassed from the client.
-- **Roles cannot be self-assigned**: A profile can only be created with the role that matches its email domain, and `role` can never be changed from the client. Extra staff can be promoted manually in the Firebase Console.
+- **Domain restriction and verification**: Only `@alustudent.com` (student) and `@alueducation.com` (staff) addresses can register or sign in. The app keeps you on the verification screen until your email is verified. The security rules repeat this check using the token's `email_verified` claim, so it can't be bypassed from the client.
+- **No self-assigned roles**: A profile can only be created with the role that matches its email domain, and `role` can never be changed from the client. If you need extra staff, promote them manually in the Firebase Console.
 - **Firestore rules (`firestore.rules`)**:
-  - Report reads are limited to verified ALU users. User profiles (which hold emails) are readable only by their owner and staff.
-  - Reports cannot contain an email field, and anonymous reports must use the name "Anonymous".
-  - A report can only be created by its author, starting as `pending` with zero votes.
-  - Staff can change only `status`, `priority`, assignment fields and history. The author can only attach photo URLs to their own report. Any user can only add or remove their own upvote.
-  - Staff can delete any report; authors only while it is still `pending`.
-- **Storage rules (`storage.rules`)**: Only the report's author can upload (JPEG/PNG, under 5 MB); only the author or staff can delete; reading requires a verified ALU account.
+  - Only verified ALU users can read reports. User profiles (which contain emails) can only be read by their owner and staff.
+  - Reports can't contain an email field, and anonymous reports must use the name "Anonymous".
+  - Only a report's author can create it, and it has to start as `pending` with zero votes.
+  - Staff can change only `status`, `priority`, assignment fields and history. Authors can only attach photo URLs to their own report. Anyone can add or remove their own upvote, and nobody else's.
+  - Staff can delete any report. Authors can delete theirs only while it's still `pending`.
+- **Storage rules (`storage.rules`)**: Only the report's author can upload (JPEG/PNG, under 5 MB). Only the author or staff can delete. You need a verified ALU account to read anything.
 
 ---
 
-## Getting Started
+## Getting started
 
-### Prerequisites
+### What you'll need
 - [Flutter SDK](https://flutter.dev/docs/get-started/install) (v3.13.0 or higher)
 - Android Studio with an Android emulator (or a physical device / iOS simulator)
-- A Firebase project (free Spark plan is enough)
+- A Firebase project (the free Spark plan is enough)
 - Node.js, plus the Firebase CLI and FlutterFire CLI:
   `npm i -g firebase-tools` and `dart pub global activate flutterfire_cli`
 
@@ -105,19 +102,19 @@ lib/
 1. Create a project in the [Firebase Console](https://console.firebase.google.com).
 2. **Authentication** -> Sign-in method -> enable **Email/Password**.
 3. **Firestore Database** -> create a database (production mode).
-4. **Storage** -> get started (a bucket is created).
-5. From the project folder run `flutterfire configure`, choose your project and the Android/iOS platforms. This regenerates `lib/firebase_options.dart` and adds `android/app/google-services.json`. The app refuses to start while the template placeholder values are still in `firebase_options.dart`.
-6. Deploy the security rules: `firebase login`, `firebase use <your-project-id>`, then `firebase deploy --only firestore:rules,storage`.
+4. **Storage** -> Get started (a bucket is created for you).
+5. From the project folder, run `flutterfire configure` and choose your project and the Android/iOS platforms. This regenerates `lib/firebase_options.dart` and adds `android/app/google-services.json`. The app won't start while the template placeholder values are still in `firebase_options.dart`.
+6. Deploy the security rules: run `firebase login`, then `firebase use <your-project-id>`, then `firebase deploy --only firestore: rules, storage`.
 
-### Install & run
+### Install and run
 ```bash
-git clone <your-repository-url>
+git clone <https://github.com/kenny260/report.git>
 cd campus_incident_reporter
 flutter pub get
 flutter test          # unit and widget tests (no Firebase needed)
 flutter run           # on an Android emulator or device
 ```
 
-### Creating the accounts for a demo
-- **Student**: register in the app with an `@alustudent.com` address and verify it from the email.
-- **Staff**: register with an `@alueducation.com` address and verify it. Staff privileges come from the verified domain, or from setting `role` to `staff` on the user's document in the Firestore Console.
+### Setting up accounts for a demo
+- **Student**: Register in the app with an `@alustudent.com` address and verify it from the email.
+- **Staff**: Register with an `@alueducation.com` address and verify it. Staff privileges come from the verified domain, or you can set `role` to `staff` on the user's document in the Firestore Console.
